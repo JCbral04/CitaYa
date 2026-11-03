@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CitaYa — Panel del negocio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<base target="_blank">
+</head>
+<body>
+  <div class="app">
+
+    <!-- ============ Sidebar (30% — estructura) ============ -->
+    <aside class="sidebar" id="sidebar">
+      <a href="#panel" class="brand">
+        <span class="brand-mark"><i data-lucide="scissors"></i></span>
+        <span class="brand-name">CitaYa</span>
+      </a>
+
+      <nav class="side-nav">
+        <p class="nav-label">Menú</p>
+        <a href="#panel" class="nav-item active"><i data-lucide="layout-dashboard"></i>Panel del día</a>
+        <a href="#citas" class="nav-item"><i data-lucide="calendar-days"></i>Citas</a>
+        <a href="#servicios" class="nav-item"><i data-lucide="scissors"></i>Servicios</a>
+        <a href="#recomendaciones" class="nav-item"><i data-lucide="sparkles"></i>Recomendaciones</a>
+      </nav>
+
+      <div class="side-footer">
+        <span class="avatar">BC</span>
+        <div class="side-user-info">
+          <p class="side-user">Barbería El Corte</p>
+          <p class="side-role">Cuenta demo</p>
+        </div>
+      </div>
+    </aside>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ============ Contenido principal ============ -->
+    <div class="main">
+
+      <header class="topbar">
+        <button class="icon-btn" id="menuBtn" aria-label="Abrir menú"><i data-lucide="menu"></i></button>
+        <div class="topbar-title">
+          <h1>Panel del día</h1>
+          <p>Lunes, 3 de noviembre de 2026</p>
+        </div>
+        <a href="#servicios" class="btn-primary"><i data-lucide="calendar-plus"></i>Reservar cita</a>
+      </header>
+
+      <main class="content">
+
+        <!-- Banner de bienvenida -->
+        <section class="welcome" id="panel">
+          <div>
+            <h2>Buenos días, Barbería El Corte</h2>
+            <p>Hoy tienes <strong>4 citas activas</strong> · 2 confirmadas para la próxima hora.</p>
+          </div>
+          <span class="welcome-badge"><i data-lucide="trending-up"></i>+18% vs. la semana pasada</span>
+        </section>
+
+        <!-- Indicadores -->
+        <section class="stats-grid" id="statsGrid"></section>
+
+        <!-- Gráfica + próximas citas -->
+        <section class="content-grid">
+          <article class="card">
+            <div class="card-head">
+              <div>
+                <h2>Citas registradas</h2>
+                <p class="card-sub">Volumen de reservas por periodo</p>
+              </div>
+              <div class="segmented" role="tablist">
+                <button class="seg-btn active" data-period="week" role="tab">Semana</button>
+                <button class="seg-btn" data-period="month" role="tab">Mes</button>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="chartCitas"></canvas>
+            </div>
+          </article>
+
+          <article class="card" id="citas">
+            <div class="card-head">
+              <div>
+                <h2>Próximas citas</h2>
+                <p class="card-sub">Agenda de hoy</p>
+              </div>
+            </div>
+            <ul class="appt-list" id="apptList"></ul>
+          </article>
+        </section>
+
+        <!-- Servicios -->
+        <section class="card" id="servicios">
+          <div class="card-head">
+            <div>
+              <h2>Servicios del negocio</h2>
+              <p class="card-sub">Catálogo disponible para reserva</p>
+            </div>
+          </div>
+          <div class="services-grid" id="servicesGrid"></div>
+        </section>
+
+        <!-- Recomendaciones -->
+        <section class="tips-grid" id="recomendaciones">
+          <article class="tip-card">
+            <span class="tip-icon"><i data-lucide="bell-ring"></i></span>
+            <div>
+              <h3>Confirma con anticipación</h3>
+              <p>Contacta las citas pendientes con al menos 24 horas de antelación para reducir inasistencias.</p>
+            </div>
+          </article>
+          <article class="tip-card">
+            <span class="tip-icon"><i data-lucide="shield-check"></i></span>
+            <div>
+              <h3>Evita dobles reservas</h3>
+              <p>Bloquea los horarios no disponibles y confirma cada estado antes de cerrar la jornada.</p>
+            </div>
+          </article>
+          <article class="tip-card">
+            <span class="tip-icon"><i data-lucide="line-chart"></i></span>
+            <div>
+              <h3>Revisa tus ingresos</h3>
+              <p>Compara los ingresos estimados de cada día para detectar tus horas de mayor demanda.</p>
+            </div>
+          </article>
+        </section>
+
+      </main>
+
+      <footer class="footer">
+        <p>CitaYa — Prototipo inicial · Ingeniería Web 2 · Universidad Manuela Beltrán</p>
+        <p class="footer-muted">Juan Esteban Cabral Bautista · Steven Rusinque Gutiérrez · Datos simulados</p>
+      </footer>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
