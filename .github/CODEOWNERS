@@ -1,0 +1,15 @@
+# CitaYa — CODEOWNERS
+# Regla: todo cambio requiere revisión del otro integrante antes de mergear.
+
+# Frontend / visual
+/css/                  @StevenRusinque07
+/js/                   @StevenRusinque07
+/index.html            @StevenRusinque07
+
+# Backend
+/backend/              @JCbral04
+
+# Documentación compartida
+/docs/                 @JCbral04 @StevenRusinque07
+/README.md             @JCbral04 @StevenRusinque07
+/CONTRIBUTING.md       @JCbral04 @StevenRusinque07

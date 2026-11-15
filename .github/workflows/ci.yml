@@ -1,0 +1,32 @@
+name: CI
+
+# PoLP: por defecto ningún permiso; cada job declara solo lo que necesita
+permissions: {}
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  check-frontend:
+    name: Verificacion frontend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # necesario para actions/checkout
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verificar sintaxis de los módulos JS
+        run: |
+          node --check js/data.js
+          node --check js/app.js
+
+      # Fase posterior: cuando exista backend/ (npm install + npm test)
+      # y cuando js/ pase a módulos ES, ajustar la comprobación de sintaxis.
