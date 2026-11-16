@@ -30,9 +30,13 @@ function init() {
   inicializarSidebar();
   renderIndicadores();
   renderCitas();
-  renderServicios();
   inicializarGrafica();
-  lucide.createIcons();
+
+  if (window.lucide) lucide.createIcons();
+
+  renderServicios().catch((error) => {
+    console.error("Error al renderizar servicios:", error);
+  });
 }
 
 init();
