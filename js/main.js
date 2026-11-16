@@ -26,11 +26,11 @@ function inicializarSidebar() {
   );
 }
 
-function init() {
+async function init() {
   inicializarSidebar();
   renderIndicadores();
   renderCitas();
-  renderServicios();
+  await renderServicios();
   inicializarGrafica();
   lucide.createIcons();
 }
