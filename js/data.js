@@ -4,10 +4,10 @@
 // ============================================================
 
 export const servicios = [
-  { nombre: "Corte de cabello", duracion: 30, precio: 15000, icon: "scissors" },
-  { nombre: "Arreglo de barba", duracion: 20, precio: 10000, icon: "brush" },
-  { nombre: "Corte + barba",    duracion: 45, precio: 22000, icon: "sparkles" },
-  { nombre: "Manicura",         duracion: 40, precio: 18000, icon: "hand" },
+  { id: 1, nombre: "Corte de cabello", duracion: 30, duracion_min: 30, precio: 15000, icon: "scissors", activo: true },
+  { id: 2, nombre: "Arreglo de barba", duracion: 20, duracion_min: 20, precio: 10000, icon: "brush",    activo: true },
+  { id: 3, nombre: "Corte + barba",    duracion: 45, duracion_min: 45, precio: 22000, icon: "sparkles", activo: true },
+  { id: 4, nombre: "Manicura",         duracion: 40, duracion_min: 40, precio: 18000, icon: "hand",     activo: true },
 ];
 
 export const citasHoy = [
