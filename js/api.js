@@ -2,32 +2,39 @@
 // CitaYa — Capa de acceso a datos y conexión con API REST
 // ============================================================
 
-import { servicios as serviciosFallback, citasHoy, citasPorPeriodo } from "./data.js";
+import { servicios as serviciosFallback, citasPorPeriodo } from "./data.js";
 
-const API_URL =
-  window.location.port && window.location.port !== "3000"
-    ? "http://localhost:3000/api/servicios"
-    : "/api/servicios";
+const API_BASE_URL = window.CITAYA_API_BASE ?? "/api";
+const SERVICIOS_URL = `${API_BASE_URL}/servicios`;
+const STORAGE_SERVICIOS_KEY = "citaya_servicios_v1";
+const REQUEST_TIMEOUT_MS = 6000;
 
-const STORAGE_KEY = "citaya_servicios_v1";
+const ICONOS_PERMITIDOS = new Set(["scissors", "brush", "sparkles", "hand"]);
 const ICONOS_DEFECTO = ["scissors", "brush", "sparkles", "hand"];
+
+function normalizarIcono(icono, index = 0) {
+  if (typeof icono === "string" && ICONOS_PERMITIDOS.has(icono)) {
+    return icono;
+  }
+  return ICONOS_DEFECTO[index % ICONOS_DEFECTO.length];
+}
 
 function normalizarServicio(s, index = 0) {
   const duracion = Number(s.duracion_min ?? s.duracion) || 30;
   return {
     id: s.id ?? s._id ?? index + 1,
-    nombre: s.nombre,
+    nombre: String(s.nombre ?? "Servicio"),
     duracion,
     duracion_min: duracion,
     precio: Number(s.precio) || 0,
-    icon: s.icon || s.icono || ICONOS_DEFECTO[index % ICONOS_DEFECTO.length],
+    icon: normalizarIcono(s.icon ?? s.icono, index),
     activo: s.activo !== false,
   };
 }
 
-function leerLocal() {
+function leerServiciosLocal() {
   try {
-    const guardado = localStorage.getItem(STORAGE_KEY);
+    const guardado = localStorage.getItem(STORAGE_SERVICIOS_KEY);
     if (guardado) {
       const parsed = JSON.parse(guardado);
       if (Array.isArray(parsed)) return parsed.map(normalizarServicio);
@@ -36,73 +43,109 @@ function leerLocal() {
     // Ignorar errores de acceso a storage
   }
   const inicial = serviciosFallback.map(normalizarServicio);
-  guardarLocal(inicial);
+  guardarServiciosLocal(inicial);
   return inicial;
 }
 
-function guardarLocal(lista) {
+function guardarServiciosLocal(lista) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(lista));
+    localStorage.setItem(STORAGE_SERVICIOS_KEY, JSON.stringify(lista));
   } catch {
     // Ignorar errores de acceso a storage
   }
 }
 
+async function fetchConTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function esErrorDeRed(error) {
+  return error instanceof TypeError || error?.name === "AbortError";
+}
+
+async function extraerMensajeError(respuesta, fallbackMsg) {
+  try {
+    const body = await respuesta.json();
+    return body?.message || body?.error || `${fallbackMsg} (HTTP ${respuesta.status})`;
+  } catch {
+    return `${fallbackMsg} (HTTP ${respuesta.status})`;
+  }
+}
+
 export async function obtenerServicios() {
   try {
-    const respuesta = await fetch(API_URL);
-    if (!respuesta.ok) return leerLocal();
+    const respuesta = await fetchConTimeout(SERVICIOS_URL);
+    if (!respuesta.ok) {
+      console.warn(`[CitaYa] GET /servicios devolvió HTTP ${respuesta.status}. Usando respaldo local.`);
+      return { data: leerServiciosLocal(), source: "fallback" };
+    }
 
     const payload = await respuesta.json();
     const lista = Array.isArray(payload) ? payload : payload?.data;
-    if (!Array.isArray(lista)) return leerLocal();
+    if (!Array.isArray(lista)) {
+      console.warn("[CitaYa] Estructura inesperada en /servicios. Usando respaldo local.");
+      return { data: leerServiciosLocal(), source: "fallback" };
+    }
 
     const normalizados = lista.map(normalizarServicio);
-    guardarLocal(normalizados);
-    return normalizados;
-  } catch {
-    return leerLocal();
+    guardarServiciosLocal(normalizados);
+    return { data: normalizados, source: "api" };
+  } catch (error) {
+    console.warn("[CitaYa] API de servicios no disponible. Usando respaldo local.", error);
+    return { data: leerServiciosLocal(), source: "fallback" };
   }
 }
 
 export async function crearServicio(datos) {
   const duracion = Number(datos.duracion);
   const precio = Number(datos.precio);
+  const icon = normalizarIcono(datos.icon);
+
   const bodyAPI = {
-    nombre: datos.nombre,
+    nombre: String(datos.nombre).trim(),
     duracion,
     duracion_min: duracion,
     precio,
     activo: true,
   };
 
-  const actuales = leerLocal();
-  const nuevoLocal = normalizarServicio(
-    { id: Date.now(), ...bodyAPI, icon: datos.icon },
-    actuales.length
-  );
-
   try {
-    const respuesta = await fetch(API_URL, {
+    const respuesta = await fetchConTimeout(SERVICIOS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bodyAPI),
     });
-    if (respuesta.ok) {
-      const creado = await respuesta.json();
-      const item = normalizarServicio(
-        { ...(creado?.data || creado || nuevoLocal), icon: datos.icon },
-        actuales.length
-      );
-      guardarLocal([...actuales, item]);
-      return item;
-    }
-  } catch {
-    // Persistencia local cuando la API no está disponible
-  }
 
-  guardarLocal([...actuales, nuevoLocal]);
-  return nuevoLocal;
+    if (!respuesta.ok) {
+      throw new Error(await extraerMensajeError(respuesta, "No se pudo registrar el servicio"));
+    }
+
+    const creado = await respuesta.json();
+    const actuales = leerServiciosLocal();
+    const item = normalizarServicio(
+      { ...(creado?.data || creado || bodyAPI), icon },
+      actuales.length
+    );
+    guardarServiciosLocal([...actuales, item]);
+    return { data: item, source: "api" };
+  } catch (error) {
+    if (!esErrorDeRed(error)) {
+      throw error;
+    }
+    const actuales = leerServiciosLocal();
+    const nuevoLocal = normalizarServicio(
+      { id: Date.now(), ...bodyAPI, icon },
+      actuales.length
+    );
+    guardarServiciosLocal([...actuales, nuevoLocal]);
+    return { data: nuevoLocal, source: "local" };
+  }
 }
 
 export async function actualizarServicio(servicioActual, cambios) {
@@ -119,48 +162,47 @@ export async function actualizarServicio(servicioActual, cambios) {
   };
 
   try {
-    await fetch(`${API_URL}/${encodeURIComponent(servicioActual.id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(bodyAPI),
-    });
-  } catch {
-    // Persistencia local cuando la API no está disponible
-  }
+    const respuesta = await fetchConTimeout(
+      `${SERVICIOS_URL}/${encodeURIComponent(servicioActual.id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyAPI),
+      }
+    );
 
-  const actuales = leerLocal();
-  const actualizados = actuales.map((s) =>
-    String(s.id) === String(servicioActual.id)
-      ? { ...s, duracion, duracion_min: duracion, precio, activo }
-      : s
-  );
-  guardarLocal(actualizados);
-  return actualizados.find((s) => String(s.id) === String(servicioActual.id));
+    if (!respuesta.ok) {
+      throw new Error(await extraerMensajeError(respuesta, "No se pudo actualizar el servicio"));
+    }
+
+    const actuales = leerServiciosLocal();
+    const actualizados = actuales.map((s) =>
+      String(s.id) === String(servicioActual.id)
+        ? { ...s, duracion, duracion_min: duracion, precio, activo }
+        : s
+    );
+    guardarServiciosLocal(actualizados);
+    const actualizado = actualizados.find((s) => String(s.id) === String(servicioActual.id));
+    return { data: actualizado, source: "api" };
+  } catch (error) {
+    if (!esErrorDeRed(error)) {
+      throw error;
+    }
+    const actuales = leerServiciosLocal();
+    const actualizados = actuales.map((s) =>
+      String(s.id) === String(servicioActual.id)
+        ? { ...s, duracion, duracion_min: duracion, precio, activo }
+        : s
+    );
+    guardarServiciosLocal(actualizados);
+    const actualizado = actualizados.find((s) => String(s.id) === String(servicioActual.id));
+    return { data: actualizado, source: "local" };
+  }
 }
 
 export async function cambiarEstadoServicio(servicioActual, activo) {
-  try {
-    if (!activo) {
-      await fetch(`${API_URL}/${encodeURIComponent(servicioActual.id)}`, {
-        method: "DELETE",
-      });
-    } else {
-      await actualizarServicio(servicioActual, { activo: true });
-      return;
-    }
-  } catch {
-    // Persistencia local cuando la API no está disponible
-  }
-
-  const actuales = leerLocal();
-  const actualizados = actuales.map((s) =>
-    String(s.id) === String(servicioActual.id) ? { ...s, activo } : s
-  );
-  guardarLocal(actualizados);
-}
-
-export function obtenerCitasHoy() {
-  return citasHoy;
+  // Desactivación y reactivación lógica vía PUT para conservar integridad referencial
+  return actualizarServicio(servicioActual, { activo: Boolean(activo) });
 }
 
 export function obtenerCitasPorPeriodo(periodo) {

@@ -26,13 +26,17 @@ function inicializarSidebar() {
   );
 }
 
-async function init() {
+function init() {
   inicializarSidebar();
   renderIndicadores();
   renderCitas();
-  await renderServicios();
   inicializarGrafica();
-  lucide.createIcons();
+
+  if (window.lucide) lucide.createIcons();
+
+  renderServicios().catch((error) => {
+    console.error("Error al renderizar servicios:", error);
+  });
 }
 
 init();
