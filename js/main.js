@@ -28,10 +28,12 @@ function inicializarSidebar() {
 
 async function init() {
   inicializarSidebar();
-  await renderIndicadores();
-  await renderCitas();
-  await renderServicios();
   inicializarGrafica();
+  await Promise.all([
+    renderIndicadores(),
+    renderCitas(),
+    renderServicios(),
+  ]);
   lucide.createIcons();
 }
 

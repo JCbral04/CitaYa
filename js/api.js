@@ -11,6 +11,7 @@ const API_BASE =
 
 const SERVICIOS_URL = `${API_BASE}/servicios`;
 const CITAS_URL = `${API_BASE}/citas`;
+const PANEL_RESUMEN_URL = `${API_BASE}/panel/resumen`;
 
 const STORAGE_SERVICIOS_KEY = "citaya_servicios_v1";
 const STORAGE_CITAS_KEY = "citaya_citas_v1";
@@ -308,7 +309,6 @@ export async function crearCita(datos) {
     return item;
   } catch (err) {
     if (err instanceof TypeError) {
-      // Servidor backend apagado: persistencia local con validación de choque
       const nuevoLocal = normalizarCita(
         {
           id: Date.now(),
@@ -379,7 +379,6 @@ export async function cambiarEstadoCita(citaActual, nuevoEstado, extra = {}) {
     if (!(err instanceof TypeError)) {
       throw err;
     }
-    // Servidor backend apagado: continuar con persistencia local
   }
 
   const actualizadas = actuales.map((c) =>
@@ -395,6 +394,44 @@ export async function cambiarEstadoCita(citaActual, nuevoEstado, extra = {}) {
   );
   guardarCitasLocal(actualizadas);
   return actualizadas.find((c) => String(c.id) === String(citaActual.id));
+}
+
+// -------------------- Resumen del Panel (Issue #9 y #6) --------------------
+
+function calcularResumenLocal() {
+  const activas = leerCitasLocal().filter((c) => c.estado !== "cancelada");
+  return {
+    activas: activas.length,
+    confirmadas: activas.filter((c) => c.estado === "confirmada").length,
+    pendientes: activas.filter((c) => c.estado === "pendiente").length,
+    ingresosEstimados: activas.reduce((sum, c) => sum + (Number(c.precio) || 0), 0),
+  };
+}
+
+export async function obtenerResumenPanel() {
+  try {
+    const respuesta = await fetch(PANEL_RESUMEN_URL);
+    if (!respuesta.ok) return calcularResumenLocal();
+
+    const payload = await respuesta.json();
+    const data = payload?.data && !Array.isArray(payload.data) ? payload.data : payload;
+    if (!data || typeof data !== "object") return calcularResumenLocal();
+
+    const activas = Number(data.activas ?? data.total ?? data.citas_hoy);
+    const confirmadas = Number(data.confirmadas ?? data.citas_confirmadas);
+    const pendientes = Number(data.pendientes ?? data.citas_pendientes);
+    const ingresosEstimados = Number(
+      data.ingresosEstimados ?? data.ingresos_estimados ?? data.ingresos
+    );
+
+    if ([activas, confirmadas, pendientes, ingresosEstimados].some((n) => Number.isNaN(n))) {
+      return calcularResumenLocal();
+    }
+
+    return { activas, confirmadas, pendientes, ingresosEstimados };
+  } catch {
+    return calcularResumenLocal();
+  }
 }
 
 export function obtenerCitasPorPeriodo(periodo) {
