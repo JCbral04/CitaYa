@@ -25,8 +25,7 @@ jobs:
 
       - name: Verificar sintaxis de los módulos JS
         run: |
-          node --check js/data.js
-          node --check js/app.js
-
-      # Fase posterior: cuando exista backend/ (npm install + npm test)
-      # y cuando js/ pase a módulos ES, ajustar la comprobación de sintaxis.
+          for file in js/data.js js/api.js js/main.js js/ui/panel.js js/ui/citas.js js/ui/servicios.js; do
+            echo "Verificando $file"
+            node --input-type=module --check < "$file"
+          done
