@@ -6,6 +6,8 @@ import { obtenerResumenPanel, obtenerCitasPorPeriodo } from "../api.js";
 
 export const formatoCOP = (valor) => "$" + Number(valor || 0).toLocaleString("es-CO");
 
+let versionRender = 0;
+
 function renderSkeletonIndicadores(grid) {
   grid.setAttribute("aria-busy", "true");
   grid.innerHTML = Array.from({ length: 4 }, () => `
@@ -22,13 +24,39 @@ function renderSkeletonIndicadores(grid) {
   `).join("");
 }
 
+function mostrarAvisoOrigenPanel(source) {
+  const grid = document.getElementById("statsGrid");
+  const parent = grid?.parentElement;
+  if (!parent) return;
+
+  let aviso = document.getElementById("panelSourceNotice");
+  if (source !== "fallback") {
+    if (aviso) aviso.remove();
+    return;
+  }
+
+  if (!aviso) {
+    aviso = document.createElement("p");
+    aviso.id = "panelSourceNotice";
+    aviso.className = "card-sub";
+    aviso.style.marginTop = "-10px";
+    parent.insertBefore(aviso, grid.nextSibling);
+  }
+  aviso.textContent = "Mostrando información local. Los indicadores pueden no estar actualizados.";
+}
+
 export async function renderIndicadores() {
+  const versionActual = ++versionRender;
   const grid = document.getElementById("statsGrid");
   if (!grid) return;
 
   renderSkeletonIndicadores(grid);
 
-  const resumen = await obtenerResumenPanel();
+  const { data: resumen, source } = await obtenerResumenPanel();
+  if (versionActual !== versionRender) {
+    return;
+  }
+
   const indicadores = [
     {
       icono: "calendar-days", tinte: "blue",
@@ -70,6 +98,8 @@ export async function renderIndicadores() {
     </article>
   `).join("");
 
+  mostrarAvisoOrigenPanel(source);
+
   if (window.lucide) lucide.createIcons();
 }
 
@@ -84,7 +114,7 @@ export function renderGrafica(periodo) {
     data: {
       labels: config.labels,
       datasets: [{
-        label: "Citas",
+        label: "Citas (demostración)",
         data: config.data,
         backgroundColor: "#2563EB",
         hoverBackgroundColor: "#1D4ED8",
@@ -114,6 +144,12 @@ export function renderGrafica(periodo) {
 }
 
 export function inicializarGrafica() {
+  const canvas = document.getElementById("chartCitas");
+  const subtitulo = canvas?.closest(".card")?.querySelector(".card-sub");
+  if (subtitulo) {
+    subtitulo.textContent = "Volumen de reservas por período · Datos de demostración";
+  }
+
   renderGrafica("week");
   document.querySelectorAll(".seg-btn").forEach((btn) => {
     btn.addEventListener("click", () => {

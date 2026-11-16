@@ -1,5 +1,5 @@
 // ============================================================
-// CitaYa — Módulo UI para la gestión y listado de citas
+// CitaYa — Módulo UI de citas del día y gestión de estados
 // ============================================================
 
 import {
@@ -7,59 +7,47 @@ import {
   obtenerServicios,
   crearCita,
   cambiarEstadoCita,
+  obtenerFechaLocalISO,
 } from "../api.js";
 import { renderIndicadores } from "./panel.js";
 
-const CLASES_ESTADO = {
-  confirmada:   "status-confirmada",
-  pendiente:    "status-pendiente",
-  reprogramada: "status-reprogramada",
-  cancelada:    "status-cancelada",
-};
-
-const HORA_APERTURA = "08:00";
-const HORA_CIERRE = "19:00";
+const APERTURA_MIN = 8 * 60;  // 08:00
+const CIERRE_MIN = 19 * 60;   // 19:00
+const ESTADOS_PERMITIDOS = new Set(["pendiente", "confirmada", "reprogramada", "cancelada"]);
 
 let listaCitas = [];
-let listaServiciosActivos = [];
+let serviciosDisponibles = [];
 let reprogramandoId = null;
 let eventosInicializados = false;
+let procesandoCita = false;
 
-function obtenerHoyISO() {
-  return new Date().toLocaleDateString("en-CA");
+function horaAMinutos(horaStr) {
+  const [h, m] = String(horaStr || "").slice(0, 5).split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+  return h * 60 + m;
 }
 
-function obtenerHoraActual() {
-  const ahora = new Date();
-  const hh = String(ahora.getHours()).padStart(2, "0");
-  const mm = String(ahora.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
-function validarFechaHora(fecha, hora) {
-  if (!fecha) return "Selecciona una fecha para la cita.";
-  if (!hora) return "Selecciona una hora para la cita.";
-
-  const hoy = obtenerHoyISO();
-  if (fecha < hoy) {
-    return "La fecha no puede ser anterior a hoy.";
-  }
-  if (hora < HORA_APERTURA || hora > HORA_CIERRE) {
-    return `La hora debe estar dentro del horario de atención (${HORA_APERTURA} a ${HORA_CIERRE}).`;
-  }
-  if (fecha === hoy && hora <= obtenerHoraActual()) {
-    return "Para hoy debes elegir una hora futura.";
-  }
-  return null;
+function crearIconoLucide(nombre) {
+  const i = document.createElement("i");
+  i.setAttribute("data-lucide", nombre);
+  return i;
 }
 
 function mostrarMensaje(texto, tipo = "success") {
-  const box = document.getElementById("apptFeedback");
+  const box = document.getElementById("appointmentFeedback");
   if (!box) return;
 
   box.hidden = false;
   box.className = `form-feedback ${tipo === "error" ? "is-error" : "is-success"}`;
-  box.innerHTML = `<i data-lucide="${tipo === "error" ? "alert-circle" : "check-circle-2"}"></i><span>${texto}</span>`;
+
+  const span = document.createElement("span");
+  span.textContent = texto;
+
+  box.replaceChildren(
+    crearIconoLucide(tipo === "error" ? "alert-circle" : "check-circle-2"),
+    span
+  );
+
   if (window.lucide) lucide.createIcons();
 
   clearTimeout(box._timer);
@@ -68,121 +56,231 @@ function mostrarMensaje(texto, tipo = "success") {
   }, 4500);
 }
 
-async function cargarSelectServicios() {
-  const select = document.getElementById("apptServicio");
-  if (!select) return;
+function mostrarAvisoOrigen(source) {
+  const list = document.getElementById("appointmentsList");
+  const parent = list?.parentElement;
+  if (!parent) return;
 
-  const todos = await obtenerServicios();
-  listaServiciosActivos = todos.filter((s) => s.activo);
+  let aviso = document.getElementById("appointmentsSourceNotice");
+  if (source !== "fallback") {
+    if (aviso) aviso.remove();
+    return;
+  }
 
-  select.innerHTML = listaServiciosActivos.length
-    ? listaServiciosActivos
-        .map(
-          (s) =>
-            `<option value="${s.id}">${s.nombre} (${s.duracion} min · $${Number(s.precio).toLocaleString("es-CO")})</option>`
-        )
-        .join("")
-    : '<option value="">No hay servicios activos</option>';
+  if (!aviso) {
+    aviso = document.createElement("p");
+    aviso.id = "appointmentsSourceNotice";
+    aviso.className = "card-sub";
+    aviso.style.marginBottom = "10px";
+    parent.insertBefore(aviso, list);
+  }
+  aviso.textContent = "Mostrando agenda local de respaldo (sin conexión con la API).";
+}
+
+function validarFechaHora(fecha, hora, duracionMin = 30) {
+  if (!fecha || !hora) {
+    return "Selecciona fecha y hora válidas.";
+  }
+
+  const hoy = obtenerFechaLocalISO();
+  if (fecha < hoy) {
+    return "No se pueden agendar citas en fechas pasadas.";
+  }
+
+  const inicioMin = horaAMinutos(hora);
+  if (!Number.isFinite(inicioMin)) {
+    return "La hora seleccionada no es válida.";
+  }
+
+  const duracion = Number(duracionMin) || 30;
+  const finMin = inicioMin + duracion;
+
+  if (inicioMin < APERTURA_MIN || inicioMin >= CIERRE_MIN) {
+    return "El horario de atención es de 08:00 a 19:00.";
+  }
+
+  if (finMin > CIERRE_MIN) {
+    return `El servicio (${duracion} min) termina después del cierre de las 19:00.`;
+  }
+
+  if (fecha === hoy) {
+    const ahora = new Date();
+    const minutosActuales = ahora.getHours() * 60 + ahora.getMinutes();
+    if (inicioMin <= minutosActuales) {
+      return "La hora de la cita debe ser posterior a la hora actual.";
+    }
+  }
+
+  return null;
+}
+
+function crearBotonAccion(accion, idSeguro, texto, variante = "") {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = `btn-sm${variante ? ` ${variante}` : ""}`;
+  btn.setAttribute("data-appt-action", accion);
+  btn.setAttribute("data-id", idSeguro);
+  btn.disabled = procesandoCita;
+  btn.textContent = texto;
+  return btn;
+}
+
+function crearItemCita(c) {
+  const idSeguro = String(c.id);
+  const estadoSeguro = ESTADOS_PERMITIDOS.has(c.estado) ? c.estado : "pendiente";
+  const enReprogramacion = String(reprogramandoId) === idSeguro;
+
+  const li = document.createElement("li");
+  li.className = "appt";
+  li.setAttribute("data-id", idSeguro);
+
+  const timeSpan = document.createElement("span");
+  timeSpan.className = "appt-time";
+  timeSpan.textContent = c.hora;
+
+  const infoDiv = document.createElement("div");
+  infoDiv.className = "appt-info";
+
+  const clienteStrong = document.createElement("strong");
+  clienteStrong.textContent = c.cliente;
+
+  const detalleSpan = document.createElement("span");
+  detalleSpan.textContent = `${c.servicio} · ${c.fecha}`;
+
+  infoDiv.append(clienteStrong, detalleSpan);
+
+  const statusSpan = document.createElement("span");
+  statusSpan.className = `status status-${estadoSeguro}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  statusSpan.append(dot, document.createTextNode(estadoSeguro));
+
+  li.append(timeSpan, infoDiv, statusSpan);
+
+  if (estadoSeguro !== "cancelada") {
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "appt-actions";
+
+    if (estadoSeguro === "pendiente" || estadoSeguro === "reprogramada") {
+      actionsDiv.appendChild(crearBotonAccion("confirmar", idSeguro, "Confirmar", "btn-success"));
+    }
+    actionsDiv.appendChild(crearBotonAccion("reprogramar", idSeguro, "Reprogramar"));
+    actionsDiv.appendChild(crearBotonAccion("cancelar", idSeguro, "Cancelar", "btn-danger"));
+
+    li.appendChild(actionsDiv);
+  }
+
+  if (enReprogramacion) {
+    const box = document.createElement("div");
+    box.className = "appt-reschedule-box";
+
+    const row = document.createElement("div");
+    row.className = "appt-reschedule-row";
+
+    const inputFecha = document.createElement("input");
+    inputFecha.type = "date";
+    inputFecha.id = `reprogFecha-${idSeguro}`;
+    inputFecha.value = c.fecha;
+    inputFecha.min = obtenerFechaLocalISO();
+    inputFecha.setAttribute("aria-label", "Nueva fecha");
+
+    const inputHora = document.createElement("input");
+    inputHora.type = "time";
+    inputHora.id = `reprogHora-${idSeguro}`;
+    inputHora.value = c.hora;
+    inputHora.min = "08:00";
+    inputHora.max = "19:00";
+    inputHora.setAttribute("aria-label", "Nueva hora");
+
+    row.append(inputFecha, inputHora);
+
+    const rowActions = document.createElement("div");
+    rowActions.className = "appt-actions";
+    rowActions.append(
+      crearBotonAccion("guardar-reprog", idSeguro, "Guardar", "btn-success"),
+      crearBotonAccion("cancelar-reprog", idSeguro, "Cerrar")
+    );
+
+    box.append(row, rowActions);
+    li.appendChild(box);
+  }
+
+  return li;
 }
 
 function pintarListaCitas() {
-  const list = document.getElementById("apptList");
+  const list = document.getElementById("appointmentsList");
   if (!list) return;
 
-  const ordenadas = [...listaCitas].sort((a, b) =>
-    `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`)
-  );
+  list.replaceChildren();
 
-  list.innerHTML = ordenadas.map((c) => {
-    const puedeConfirmar = c.estado === "pendiente" || c.estado === "reprogramada";
-    const puedeReprogramar = c.estado !== "cancelada";
-    const puedeCancelar = c.estado !== "cancelada";
-    const enReprogramacion = String(reprogramandoId) === String(c.id);
+  if (listaCitas.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "appt";
+    const span = document.createElement("span");
+    span.className = "card-sub";
+    span.textContent = "No hay citas programadas para hoy.";
+    empty.appendChild(span);
+    list.appendChild(empty);
+    return;
+  }
 
-    return `
-      <li class="appt" data-id="${c.id}">
-        <span class="appt-time">${c.hora}</span>
-        <div class="appt-info">
-          <strong>${c.cliente}</strong>
-          <span>${c.servicio} · ${c.fecha}</span>
-        </div>
-        <span class="status ${CLASES_ESTADO[c.estado] || "status-pendiente"}">
-          <span class="dot"></span>${c.estado}
-        </span>
+  const fragment = document.createDocumentFragment();
+  for (const cita of listaCitas) {
+    fragment.appendChild(crearItemCita(cita));
+  }
+  list.appendChild(fragment);
+}
 
-        ${c.estado !== "cancelada" ? `
-          <div class="appt-actions">
-            ${puedeConfirmar ? `
-              <button type="button" class="btn-sm btn-success" data-appt-action="confirmar" data-id="${c.id}">
-                <i data-lucide="check"></i>Confirmar
-              </button>
-            ` : ""}
-            ${puedeReprogramar ? `
-              <button type="button" class="btn-sm" data-appt-action="reprogramar" data-id="${c.id}">
-                <i data-lucide="calendar-clock"></i>Reprogramar
-              </button>
-            ` : ""}
-            ${puedeCancelar ? `
-              <button type="button" class="btn-sm btn-danger" data-appt-action="cancelar" data-id="${c.id}">
-                <i data-lucide="x"></i>Cancelar
-              </button>
-            ` : ""}
-          </div>
-        ` : ""}
+function cargarSelectServicios() {
+  const select = document.getElementById("apptServicio");
+  if (!select) return;
 
-        ${enReprogramacion ? `
-          <div class="appt-reschedule-box">
-            <div class="appt-reschedule-row">
-              <input type="date" id="repFecha-${c.id}" value="${c.fecha}" min="${obtenerHoyISO()}" aria-label="Nueva fecha">
-              <input type="time" id="repHora-${c.id}" value="${c.hora}" min="${HORA_APERTURA}" max="${HORA_CIERRE}" aria-label="Nueva hora">
-            </div>
-            <div class="service-actions">
-              <button type="button" class="btn-sm" data-appt-action="save-reprogramar" data-id="${c.id}">
-                <i data-lucide="check"></i>Guardar cambio
-              </button>
-              <button type="button" class="btn-sm" data-appt-action="cancel-reprogramar">Cerrar</button>
-            </div>
-          </div>
-        ` : ""}
-      </li>
-    `;
-  }).join("");
+  const activos = serviciosDisponibles.filter((s) => s.activo !== false);
+  select.replaceChildren();
 
-  if (window.lucide) lucide.createIcons();
+  for (const s of activos) {
+    const option = document.createElement("option");
+    option.value = String(s.id);
+    option.textContent = `${s.nombre} (${s.duracion} min)`;
+    select.appendChild(option);
+  }
+}
+
+async function refrescarCitas() {
+  const { data, source } = await obtenerCitasHoy();
+  listaCitas = data;
+  mostrarAvisoOrigen(source);
+  pintarListaCitas();
 }
 
 function configurarEventos() {
   if (eventosInicializados) return;
   eventosInicializados = true;
 
-  const toggleBtn = document.getElementById("toggleApptFormBtn");
-  const topbarBtn = document.getElementById("topbarNewApptBtn");
-  const cancelBtn = document.getElementById("cancelApptFormBtn");
-  const form = document.getElementById("apptForm");
-  const list = document.getElementById("apptList");
-  const fechaInput = document.getElementById("apptFecha");
+  const openBtn = document.getElementById("openAppointmentFormBtn");
+  const cancelBtn = document.getElementById("cancelAppointmentFormBtn");
+  const form = document.getElementById("appointmentForm");
+  const submitBtn = form?.querySelector('button[type="submit"]');
+  const list = document.getElementById("appointmentsList");
 
-  async function abrirFormulario() {
-    await cargarSelectServicios();
+  const abrirFormulario = async () => {
+    const { data } = await obtenerServicios();
+    serviciosDisponibles = data;
+    cargarSelectServicios();
+    const fechaInput = document.getElementById("apptFecha");
     if (fechaInput) {
-      const hoy = obtenerHoyISO();
+      const hoy = obtenerFechaLocalISO();
       fechaInput.min = hoy;
       if (!fechaInput.value) fechaInput.value = hoy;
     }
     form.hidden = false;
     document.getElementById("apptCliente")?.focus();
-  }
+  };
 
-  toggleBtn?.addEventListener("click", async () => {
-    if (form.hidden) {
-      await abrirFormulario();
-    } else {
-      form.hidden = true;
-    }
-  });
-
-  topbarBtn?.addEventListener("click", async () => {
-    await abrirFormulario();
+  openBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    abrirFormulario();
   });
 
   cancelBtn?.addEventListener("click", () => {
@@ -192,54 +290,60 @@ function configurarEventos() {
 
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (procesandoCita) return;
+
     const cliente = document.getElementById("apptCliente").value.trim();
     const servicioId = document.getElementById("apptServicio").value;
     const fecha = document.getElementById("apptFecha").value;
     const hora = document.getElementById("apptHora").value;
 
-    if (cliente.length < 3) {
-      mostrarMensaje("Ingresa el nombre del cliente (mínimo 3 caracteres).", "error");
+    if (cliente.length < 2) {
+      mostrarMensaje("Ingresa el nombre del cliente (mínimo 2 caracteres).", "error");
       return;
     }
 
-    const servicioObj = listaServiciosActivos.find(
-      (s) => String(s.id) === String(servicioId)
-    );
+    const servicioObj = serviciosDisponibles.find((s) => String(s.id) === String(servicioId));
     if (!servicioObj) {
-      mostrarMensaje("Selecciona un servicio disponible.", "error");
+      mostrarMensaje("Selecciona un servicio válido.", "error");
       return;
     }
 
-    const errorHorario = validarFechaHora(fecha, hora);
-    if (errorHorario) {
-      mostrarMensaje(errorHorario, "error");
+    const errorFechaHora = validarFechaHora(fecha, hora, servicioObj.duracion);
+    if (errorFechaHora) {
+      mostrarMensaje(errorFechaHora, "error");
       return;
     }
+
+    procesandoCita = true;
+    if (submitBtn) submitBtn.disabled = true;
 
     try {
-      const creada = await crearCita({
+      await crearCita({
         cliente,
         servicio_id: servicioObj.id,
         servicio: servicioObj.nombre,
-        precio: servicioObj.precio,
+        duracion: servicioObj.duracion,
         fecha,
         hora,
+        precio: servicioObj.precio,
       });
 
-      listaCitas.push(creada);
       form.reset();
       form.hidden = true;
-      pintarListaCitas();
+      await refrescarCitas();
       await renderIndicadores();
-      mostrarMensaje(`Cita agendada para ${creada.cliente} a las ${creada.hora}.`);
+      mostrarMensaje(`Cita agendada para ${cliente} el ${fecha} a las ${hora}.`);
     } catch (err) {
       mostrarMensaje(err.message || "No se pudo agendar la cita.", "error");
+    } finally {
+      procesandoCita = false;
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 
   list?.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-appt-action]");
-    if (!btn) return;
+    if (!btn || procesandoCita) return;
 
     const action = btn.dataset.apptAction;
     const id = btn.dataset.id;
@@ -250,66 +354,80 @@ function configurarEventos() {
       return;
     }
 
-    if (action === "cancel-reprogramar") {
+    if (action === "cancelar-reprog") {
       reprogramandoId = null;
       pintarListaCitas();
       return;
     }
 
-    const actual = listaCitas.find((c) => String(c.id) === String(id));
-    if (!actual) return;
+    const citaActual = listaCitas.find((c) => String(c.id) === String(id));
+    if (!citaActual) return;
 
-    try {
-      if (action === "confirmar") {
-        const actualizada = await cambiarEstadoCita(actual, "confirmada");
-        listaCitas = listaCitas.map((c) =>
-          String(c.id) === String(id) ? actualizada : c
-        );
-        pintarListaCitas();
-        await renderIndicadores();
-        mostrarMensaje(`Cita de ${actual.cliente} confirmada.`);
-      } else if (action === "cancelar") {
-        const actualizada = await cambiarEstadoCita(actual, "cancelada");
-        listaCitas = listaCitas.map((c) =>
-          String(c.id) === String(id) ? actualizada : c
-        );
+    if (action === "confirmar" || action === "cancelar") {
+      const nuevoEstado = action === "confirmar" ? "confirmada" : "cancelada";
+      procesandoCita = true;
+      pintarListaCitas();
+
+      try {
+        await cambiarEstadoCita(citaActual, nuevoEstado);
         if (String(reprogramandoId) === String(id)) reprogramandoId = null;
-        pintarListaCitas();
+        await refrescarCitas();
         await renderIndicadores();
-        mostrarMensaje(`Cita de ${actual.cliente} cancelada.`);
-      } else if (action === "save-reprogramar") {
-        const nuevaFecha = document.getElementById(`repFecha-${id}`)?.value;
-        const nuevaHora = document.getElementById(`repHora-${id}`)?.value;
+        mostrarMensaje(
+          `Cita de ${citaActual.cliente} marcada como ${nuevoEstado}.`
+        );
+      } catch (err) {
+        mostrarMensaje(err.message || "No se pudo actualizar la cita.", "error");
+      } finally {
+        procesandoCita = false;
+        pintarListaCitas();
+      }
+      return;
+    }
 
-        const errorHorario = validarFechaHora(nuevaFecha, nuevaHora);
-        if (errorHorario) {
-          mostrarMensaje(errorHorario, "error");
-          return;
-        }
+    if (action === "guardar-reprog") {
+      const nuevaFecha = document.getElementById(`reprogFecha-${id}`)?.value;
+      const nuevaHora = document.getElementById(`reprogHora-${id}`)?.value;
 
-        const actualizada = await cambiarEstadoCita(actual, "reprogramada", {
+      const errorFechaHora = validarFechaHora(nuevaFecha, nuevaHora, citaActual.duracion);
+      if (errorFechaHora) {
+        mostrarMensaje(errorFechaHora, "error");
+        return;
+      }
+
+      procesandoCita = true;
+      pintarListaCitas();
+
+      try {
+        await cambiarEstadoCita(citaActual, "reprogramada", {
           fecha: nuevaFecha,
           hora: nuevaHora,
         });
-        listaCitas = listaCitas.map((c) =>
-          String(c.id) === String(id) ? actualizada : c
-        );
         reprogramandoId = null;
-        pintarListaCitas();
+        await refrescarCitas();
         await renderIndicadores();
         mostrarMensaje(
-          `Cita de ${actual.cliente} reprogramada para ${nuevaFecha} a las ${nuevaHora}.`
+          `Cita de ${citaActual.cliente} reprogramada para ${nuevaFecha} a las ${nuevaHora}.`
         );
+      } catch (err) {
+        mostrarMensaje(err.message || "No se pudo reprogramar la cita.", "error");
+      } finally {
+        procesandoCita = false;
+        pintarListaCitas();
       }
-    } catch (err) {
-      mostrarMensaje(err.message || "No se pudo actualizar la cita.", "error");
     }
   });
 }
 
 export async function renderCitas() {
-  listaCitas = await obtenerCitasHoy();
-  await cargarSelectServicios();
+  const [citasRes, serviciosRes] = await Promise.all([
+    obtenerCitasHoy(),
+    obtenerServicios(),
+  ]);
+  listaCitas = citasRes.data;
+  serviciosDisponibles = serviciosRes.data;
+  mostrarAvisoOrigen(citasRes.source);
+  cargarSelectServicios();
   configurarEventos();
   pintarListaCitas();
 }

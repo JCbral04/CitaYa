@@ -29,12 +29,30 @@ function inicializarSidebar() {
 async function init() {
   inicializarSidebar();
   inicializarGrafica();
+<<<<<<< HEAD
   await Promise.all([
     renderIndicadores(),
     renderCitas(),
     renderServicios(),
   ]);
   lucide.createIcons();
+=======
+
+  const modulos = [
+    ["indicadores", renderIndicadores()],
+    ["citas", renderCitas()],
+    ["servicios", renderServicios()],
+  ];
+
+  const resultados = await Promise.allSettled(modulos.map(([, promesa]) => promesa));
+  resultados.forEach((res, idx) => {
+    if (res.status === "rejected") {
+      console.error(`Error al inicializar módulo "${modulos[idx][0]}":`, res.reason);
+    }
+  });
+
+  if (window.lucide) lucide.createIcons();
+>>>>>>> feat/issue-10
 }
 
 init();

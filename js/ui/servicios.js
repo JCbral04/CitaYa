@@ -1,5 +1,5 @@
 // ============================================================
-// CitaYa — Módulo UI para el catálogo y registro de servicios
+// CitaYa — Módulo UI del catálogo y CRUD visual de servicios
 // ============================================================
 
 import {
@@ -10,9 +10,29 @@ import {
 } from "../api.js";
 import { formatoCOP } from "./panel.js";
 
+const ICONOS_PERMITIDOS = new Set(["scissors", "brush", "sparkles", "hand"]);
+
 let listaServicios = [];
-let servicioEditandoId = null;
+let editandoId = null;
 let eventosInicializados = false;
+let procesando = false;
+
+function crearIconoLucide(nombre, fallback = "scissors") {
+  const iconoSeguro = ICONOS_PERMITIDOS.has(nombre) ? nombre : fallback;
+  const i = document.createElement("i");
+  i.setAttribute("data-lucide", iconoSeguro);
+  return i;
+}
+
+function validarNumeroEntero(valor, { min, max, paso, etiqueta }) {
+  if (!Number.isInteger(valor) || valor < min || (max !== undefined && valor > max)) {
+    return `${etiqueta} debe ser un número entero entre ${min}${max !== undefined ? ` y ${max}` : ""}.`;
+  }
+  if (paso && valor % paso !== 0) {
+    return `${etiqueta} debe ser múltiplo de ${paso}.`;
+  }
+  return null;
+}
 
 function mostrarMensaje(texto, tipo = "success") {
   const box = document.getElementById("serviceFeedback");
@@ -20,7 +40,15 @@ function mostrarMensaje(texto, tipo = "success") {
 
   box.hidden = false;
   box.className = `form-feedback ${tipo === "error" ? "is-error" : "is-success"}`;
-  box.innerHTML = `<i data-lucide="${tipo === "error" ? "alert-circle" : "check-circle-2"}"></i><span>${texto}</span>`;
+
+  const span = document.createElement("span");
+  span.textContent = texto;
+
+  box.replaceChildren(
+    crearIconoLucide(tipo === "error" ? "alert-circle" : "check-circle-2"),
+    span
+  );
+
   if (window.lucide) lucide.createIcons();
 
   clearTimeout(box._timer);
@@ -29,56 +57,168 @@ function mostrarMensaje(texto, tipo = "success") {
   }, 4500);
 }
 
+function mostrarAvisoOrigen(source) {
+  const seccion = document.getElementById("servicios");
+  if (!seccion) return;
+
+  let aviso = document.getElementById("servicesSourceNotice");
+  if (source !== "fallback") {
+    if (aviso) aviso.remove();
+    return;
+  }
+
+  if (!aviso) {
+    aviso = document.createElement("p");
+    aviso.id = "servicesSourceNotice";
+    aviso.className = "card-sub";
+    aviso.style.marginBottom = "14px";
+    const grid = document.getElementById("servicesGrid");
+    seccion.insertBefore(aviso, grid);
+  }
+  aviso.textContent = "Modo sin conexión: mostrando catálogo local de respaldo.";
+}
+
+function crearTarjetaServicio(s) {
+  const idSeguro = String(s.id);
+  const enEdicion = String(editandoId) === idSeguro;
+
+  const card = document.createElement("article");
+  card.className = `service-card${s.activo ? "" : " is-inactive"}`;
+  card.setAttribute("data-id", idSeguro);
+
+  // Cabecera
+  const head = document.createElement("div");
+  head.className = "service-head";
+
+  const iconWrap = document.createElement("span");
+  iconWrap.className = "service-icon";
+  iconWrap.appendChild(crearIconoLucide(s.icon));
+
+  const titulo = document.createElement("h3");
+  titulo.textContent = s.nombre;
+
+  head.append(iconWrap, titulo);
+
+  // Duración
+  const meta = document.createElement("p");
+  meta.className = "service-meta";
+  meta.append(
+    crearIconoLucide("clock", "clock"),
+    document.createTextNode(`${s.duracion} min`)
+  );
+
+  // Precio
+  const precio = document.createElement("p");
+  precio.className = "service-price";
+  precio.textContent = formatoCOP(Number(s.precio) || 0);
+
+  // Estado disponible
+  const btnEstado = document.createElement("button");
+  btnEstado.type = "button";
+  btnEstado.className = "btn-outline";
+  btnEstado.disabled = !s.activo;
+  btnEstado.textContent = s.activo ? "Disponible" : "Inactivo";
+
+  card.append(head, meta, precio, btnEstado);
+
+  // Acciones CRUD
+  const actions = document.createElement("div");
+  actions.className = "service-actions";
+
+  const btnEdit = document.createElement("button");
+  btnEdit.type = "button";
+  btnEdit.className = "btn-sm";
+  btnEdit.setAttribute("data-srv-action", "edit");
+  btnEdit.setAttribute("data-id", idSeguro);
+  btnEdit.disabled = procesando;
+  btnEdit.append(crearIconoLucide("pencil", "pencil"), document.createTextNode("Editar"));
+
+  const btnToggle = document.createElement("button");
+  btnToggle.type = "button";
+  btnToggle.className = `btn-sm ${s.activo ? "btn-danger" : "btn-success"}`;
+  btnToggle.setAttribute("data-srv-action", "toggle");
+  btnToggle.setAttribute("data-id", idSeguro);
+  btnToggle.disabled = procesando;
+  btnToggle.append(
+    crearIconoLucide(s.activo ? "eye-off" : "rotate-ccw", "pencil"),
+    document.createTextNode(s.activo ? "Desactivar" : "Reactivar")
+  );
+
+  actions.append(btnEdit, btnToggle);
+  card.appendChild(actions);
+
+  // Caja de edición en línea
+  if (enEdicion) {
+    const editBox = document.createElement("div");
+    editBox.className = "service-edit-box";
+
+    const editRow = document.createElement("div");
+    editRow.className = "service-edit-row";
+
+    const inputDur = document.createElement("input");
+    inputDur.type = "number";
+    inputDur.id = `editDur-${idSeguro}`;
+    inputDur.value = String(s.duracion);
+    inputDur.min = "5";
+    inputDur.max = "480";
+    inputDur.step = "5";
+    inputDur.setAttribute("aria-label", "Nueva duración en minutos");
+
+    const inputPrecio = document.createElement("input");
+    inputPrecio.type = "number";
+    inputPrecio.id = `editPrecio-${idSeguro}`;
+    inputPrecio.value = String(s.precio);
+    inputPrecio.min = "1000";
+    inputPrecio.step = "500";
+    inputPrecio.setAttribute("aria-label", "Nuevo precio en COP");
+
+    editRow.append(inputDur, inputPrecio);
+
+    const editActions = document.createElement("div");
+    editActions.className = "service-actions";
+
+    const btnSave = document.createElement("button");
+    btnSave.type = "button";
+    btnSave.className = "btn-sm btn-success";
+    btnSave.setAttribute("data-srv-action", "save-edit");
+    btnSave.setAttribute("data-id", idSeguro);
+    btnSave.disabled = procesando;
+    btnSave.append(crearIconoLucide("check", "check"), document.createTextNode("Guardar"));
+
+    const btnCancel = document.createElement("button");
+    btnCancel.type = "button";
+    btnCancel.className = "btn-sm";
+    btnCancel.setAttribute("data-srv-action", "cancel-edit");
+    btnCancel.disabled = procesando;
+    btnCancel.textContent = "Cancelar";
+
+    editActions.append(btnSave, btnCancel);
+    editBox.append(editRow, editActions);
+    card.appendChild(editBox);
+  }
+
+  return card;
+}
+
 function pintarTarjetas() {
   const grid = document.getElementById("servicesGrid");
   if (!grid) return;
 
-  const ordenados = [...listaServicios].sort((a, b) => Number(b.activo) - Number(a.activo));
+  grid.replaceChildren();
 
-  grid.innerHTML = ordenados.map((s) => {
-    const enEdicion = String(servicioEditandoId) === String(s.id);
-    return `
-      <article class="service-card ${s.activo ? "" : "is-inactive"}" data-id="${s.id}">
-        <div class="service-head">
-          <span class="service-icon"><i data-lucide="${s.icon || "scissors"}"></i></span>
-          <h3>${s.nombre}</h3>
-        </div>
-        <p class="service-meta">
-          <i data-lucide="clock"></i>${s.duracion} min
-          ${s.activo ? "" : '<span class="status status-cancelada"><span class="dot"></span>Inactivo</span>'}
-        </p>
-        <p class="service-price">${formatoCOP(Number(s.precio) || 0)}</p>
+  if (listaServicios.length === 0) {
+    const vacio = document.createElement("p");
+    vacio.className = "card-sub";
+    vacio.textContent = "No hay servicios registrados en este momento.";
+    grid.appendChild(vacio);
+    return;
+  }
 
-        <button class="btn-outline" disabled title="Disponible cuando se active la reserva en línea">
-          ${s.activo ? "Agendar" : "No disponible"}
-        </button>
-
-        <div class="service-actions">
-          <button type="button" class="btn-sm" data-action="edit" data-id="${s.id}">
-            <i data-lucide="pencil"></i>Editar
-          </button>
-          <button type="button" class="btn-sm ${s.activo ? "btn-danger" : ""}" data-action="toggle" data-id="${s.id}">
-            <i data-lucide="${s.activo ? "ban" : "rotate-ccw"}"></i>${s.activo ? "Desactivar" : "Reactivar"}
-          </button>
-        </div>
-
-        ${enEdicion ? `
-          <div class="service-edit-box">
-            <div class="service-edit-row">
-              <input type="number" id="editDuracion-${s.id}" value="${s.duracion}" min="5" max="480" step="5" aria-label="Nueva duración en minutos">
-              <input type="number" id="editPrecio-${s.id}" value="${s.precio}" min="1000" step="500" aria-label="Nuevo precio en pesos">
-            </div>
-            <div class="service-actions">
-              <button type="button" class="btn-sm" data-action="save-edit" data-id="${s.id}">
-                <i data-lucide="check"></i>Guardar
-              </button>
-              <button type="button" class="btn-sm" data-action="cancel-edit">Cancelar</button>
-            </div>
-          </div>
-        ` : ""}
-      </article>
-    `;
-  }).join("");
+  const fragment = document.createDocumentFragment();
+  for (const servicio of listaServicios) {
+    fragment.appendChild(crearTarjetaServicio(servicio));
+  }
+  grid.appendChild(fragment);
 
   if (window.lucide) lucide.createIcons();
 }
@@ -90,6 +230,7 @@ function configurarEventos() {
   const toggleBtn = document.getElementById("toggleServiceFormBtn");
   const cancelBtn = document.getElementById("cancelServiceFormBtn");
   const form = document.getElementById("serviceForm");
+  const submitBtn = form?.querySelector('button[type="submit"]');
   const grid = document.getElementById("servicesGrid");
 
   toggleBtn?.addEventListener("click", () => {
@@ -104,95 +245,160 @@ function configurarEventos() {
 
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (procesando) return;
+
     const nombre = document.getElementById("srvNombre").value.trim();
     const duracion = Number(document.getElementById("srvDuracion").value);
     const precio = Number(document.getElementById("srvPrecio").value);
-    const icon = document.getElementById("srvIcon").value || "scissors";
+    const icon = document.getElementById("srvIcon").value;
 
     if (nombre.length < 3) {
       mostrarMensaje("El nombre del servicio debe tener al menos 3 caracteres.", "error");
       return;
     }
-    if (listaServicios.some((s) => s.nombre.toLowerCase() === nombre.toLowerCase())) {
-      mostrarMensaje("Ya existe un servicio registrado con ese nombre.", "error");
-      return;
-    }
-    if (!Number.isFinite(duracion) || duracion < 5 || duracion > 480) {
-      mostrarMensaje("Ingresa una duración válida entre 5 y 480 minutos.", "error");
-      return;
-    }
-    if (!Number.isFinite(precio) || precio < 1000) {
-      mostrarMensaje("El precio debe ser mayor o igual a $1.000 COP.", "error");
+
+    const errDuracion = validarNumeroEntero(duracion, {
+      min: 5,
+      max: 480,
+      paso: 5,
+      etiqueta: "La duración",
+    });
+    if (errDuracion) {
+      mostrarMensaje(errDuracion, "error");
       return;
     }
 
-    const creado = await crearServicio({ nombre, duracion, precio, icon });
-    listaServicios.push(creado);
-    form.reset();
-    form.hidden = true;
-    pintarTarjetas();
-    mostrarMensaje(`Servicio "${creado.nombre}" registrado correctamente.`);
+    const errPrecio = validarNumeroEntero(precio, {
+      min: 1000,
+      paso: 500,
+      etiqueta: "El precio",
+    });
+    if (errPrecio) {
+      mostrarMensaje(errPrecio, "error");
+      return;
+    }
+
+    procesando = true;
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const { data: creado, source } = await crearServicio({ nombre, duracion, precio, icon });
+      listaServicios.push(creado);
+      form.reset();
+      form.hidden = true;
+      pintarTarjetas();
+
+      const sufijo = source === "local" ? " (guardado en modo local sin conexión)" : "";
+      mostrarMensaje(`Servicio "${creado.nombre}" registrado correctamente${sufijo}.`);
+    } catch (error) {
+      mostrarMensaje(error.message || "No se pudo registrar el servicio.", "error");
+    } finally {
+      procesando = false;
+      if (submitBtn) submitBtn.disabled = false;
+    }
   });
 
   grid?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-action]");
-    if (!btn) return;
+    const btn = e.target.closest("[data-srv-action]");
+    if (!btn || procesando) return;
 
-    const action = btn.dataset.action;
+    const action = btn.dataset.srvAction;
     const id = btn.dataset.id;
 
     if (action === "edit") {
-      servicioEditandoId = String(servicioEditandoId) === String(id) ? null : id;
+      editandoId = String(editandoId) === String(id) ? null : id;
       pintarTarjetas();
-    } else if (action === "cancel-edit") {
-      servicioEditandoId = null;
-      pintarTarjetas();
-    } else if (action === "save-edit") {
-      const actual = listaServicios.find((s) => String(s.id) === String(id));
-      if (!actual) return;
+      return;
+    }
 
-      const nuevaDuracion = Number(document.getElementById(`editDuracion-${id}`)?.value);
+    if (action === "cancel-edit") {
+      editandoId = null;
+      pintarTarjetas();
+      return;
+    }
+
+    const actual = listaServicios.find((s) => String(s.id) === String(id));
+    if (!actual) return;
+
+    if (action === "save-edit") {
+      const nuevaDuracion = Number(document.getElementById(`editDur-${id}`)?.value);
       const nuevoPrecio = Number(document.getElementById(`editPrecio-${id}`)?.value);
 
-      if (!Number.isFinite(nuevaDuracion) || nuevaDuracion < 5 || nuevaDuracion > 480) {
-        mostrarMensaje("La duración debe estar entre 5 y 480 minutos.", "error");
-        return;
-      }
-      if (!Number.isFinite(nuevoPrecio) || nuevoPrecio < 1000) {
-        mostrarMensaje("El precio debe ser mayor o igual a $1.000 COP.", "error");
+      const errDuracion = validarNumeroEntero(nuevaDuracion, {
+        min: 5,
+        max: 480,
+        paso: 5,
+        etiqueta: "La duración",
+      });
+      if (errDuracion) {
+        mostrarMensaje(errDuracion, "error");
         return;
       }
 
-      await actualizarServicio(actual, { duracion: nuevaDuracion, precio: nuevoPrecio });
-      listaServicios = listaServicios.map((s) =>
-        String(s.id) === String(id)
-          ? { ...s, duracion: nuevaDuracion, duracion_min: nuevaDuracion, precio: nuevoPrecio }
-          : s
-      );
-      servicioEditandoId = null;
+      const errPrecio = validarNumeroEntero(nuevoPrecio, {
+        min: 1000,
+        paso: 500,
+        etiqueta: "El precio",
+      });
+      if (errPrecio) {
+        mostrarMensaje(errPrecio, "error");
+        return;
+      }
+
+      procesando = true;
       pintarTarjetas();
-      mostrarMensaje("Precio y duración actualizados correctamente.");
-    } else if (action === "toggle") {
-      const actual = listaServicios.find((s) => String(s.id) === String(id));
-      if (!actual) return;
+
+      try {
+        const { data: actualizado, source } = await actualizarServicio(actual, {
+          duracion: nuevaDuracion,
+          precio: nuevoPrecio,
+        });
+        listaServicios = listaServicios.map((s) =>
+          String(s.id) === String(id) ? actualizado : s
+        );
+        editandoId = null;
+        const sufijo = source === "local" ? " (modo local sin conexión)" : "";
+        mostrarMensaje(`Servicio "${actual.nombre}" actualizado${sufijo}.`);
+      } catch (error) {
+        mostrarMensaje(error.message || "No se pudo actualizar el servicio.", "error");
+      } finally {
+        procesando = false;
+        pintarTarjetas();
+      }
+      return;
+    }
+
+    if (action === "toggle") {
       const nuevoEstado = !actual.activo;
-
-      await cambiarEstadoServicio(actual, nuevoEstado);
-      listaServicios = listaServicios.map((s) =>
-        String(s.id) === String(id) ? { ...s, activo: nuevoEstado } : s
-      );
+      procesando = true;
       pintarTarjetas();
-      mostrarMensaje(
-        nuevoEstado
-          ? `Servicio "${actual.nombre}" reactivado.`
-          : `Servicio "${actual.nombre}" desactivado correctamente.`
-      );
+
+      try {
+        const { data: actualizado, source } = await cambiarEstadoServicio(actual, nuevoEstado);
+        listaServicios = listaServicios.map((s) =>
+          String(s.id) === String(id) ? actualizado : s
+        );
+        if (!nuevoEstado && String(editandoId) === String(id)) {
+          editandoId = null;
+        }
+        const sufijo = source === "local" ? " (modo local sin conexión)" : "";
+        mostrarMensaje(
+          `Servicio "${actual.nombre}" ${nuevoEstado ? "reactivado" : "desactivado"}${sufijo}.`
+        );
+      } catch (error) {
+        mostrarMensaje(error.message || "No se pudo cambiar el estado del servicio.", "error");
+      } finally {
+        procesando = false;
+        pintarTarjetas();
+      }
     }
   });
 }
 
 export async function renderServicios() {
-  listaServicios = await obtenerServicios();
+  const { data, source } = await obtenerServicios();
+  listaServicios = data;
+  mostrarAvisoOrigen(source);
   configurarEventos();
   pintarTarjetas();
 }
