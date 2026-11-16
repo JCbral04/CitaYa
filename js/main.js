@@ -29,14 +29,6 @@ function inicializarSidebar() {
 async function init() {
   inicializarSidebar();
   inicializarGrafica();
-<<<<<<< HEAD
-  await Promise.all([
-    renderIndicadores(),
-    renderCitas(),
-    renderServicios(),
-  ]);
-  lucide.createIcons();
-=======
 
   const modulos = [
     ["indicadores", renderIndicadores()],
@@ -52,7 +44,6 @@ async function init() {
   });
 
   if (window.lucide) lucide.createIcons();
->>>>>>> feat/issue-10
 }
 
 init();
