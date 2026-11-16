@@ -48,7 +48,7 @@
           <h1>Panel del día</h1>
           <p>Lunes, 3 de noviembre de 2026</p>
         </div>
-        <a href="#servicios" class="btn-primary"><i data-lucide="calendar-plus"></i>Reservar cita</a>
+        <a href="#citas" class="btn-primary" id="topbarNewApptBtn"><i data-lucide="calendar-plus"></i>Reservar cita</a>
       </header>
 
       <main class="content">
@@ -87,9 +87,42 @@
             <div class="card-head">
               <div>
                 <h2>Próximas citas</h2>
-                <p class="card-sub">Agenda de hoy</p>
+                <p class="card-sub">Agenda y gestión de reservas</p>
               </div>
+              <button type="button" class="btn-outline btn-head" id="toggleApptFormBtn">
+                <i data-lucide="plus"></i>Nueva cita
+              </button>
             </div>
+
+            <div id="apptFeedback" class="form-feedback" hidden role="status" aria-live="polite"></div>
+
+            <form id="apptForm" class="service-form" hidden novalidate>
+              <div class="appt-form-grid">
+                <div class="form-field">
+                  <label for="apptCliente">Cliente</label>
+                  <input type="text" id="apptCliente" name="cliente" placeholder="Ej. Camilo Herrera" maxlength="60" required>
+                </div>
+                <div class="form-field">
+                  <label for="apptServicio">Servicio</label>
+                  <select id="apptServicio" name="servicio" required></select>
+                </div>
+                <div class="form-field">
+                  <label for="apptFecha">Fecha</label>
+                  <input type="date" id="apptFecha" name="fecha" required>
+                </div>
+                <div class="form-field">
+                  <label for="apptHora">Hora (08:00 – 19:00)</label>
+                  <input type="time" id="apptHora" name="hora" min="08:00" max="19:00" required>
+                </div>
+              </div>
+              <div class="service-form-actions">
+                <button type="submit" class="btn-primary">
+                  <i data-lucide="check"></i>Agendar cita
+                </button>
+                <button type="button" class="btn-outline" id="cancelApptFormBtn">Cancelar</button>
+              </div>
+            </form>
+
             <ul class="appt-list" id="apptList"></ul>
           </article>
         </section>

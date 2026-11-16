@@ -335,8 +335,9 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; }
 
 .appt {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 10px 14px;
   padding: 13px 4px;
   border-bottom: 1px solid var(--border-soft);
 }
@@ -351,9 +352,55 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; }
   font-variant-numeric: tabular-nums;
 }
 
-.appt-info { flex: 1; min-width: 0; }
+.appt-info { flex: 1; min-width: 120px; }
 .appt-info strong { display: block; font-size: .92rem; font-weight: 600; }
 .appt-info span { color: var(--muted); font-size: .82rem; }
+
+.appt-actions {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 66px;
+}
+
+.appt-actions .btn-sm {
+  flex: 0 1 auto;
+  padding: 5px 10px;
+  font-size: .76rem;
+}
+
+.appt-reschedule-box {
+  width: 100%;
+  padding-left: 66px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.appt-reschedule-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.appt-reschedule-row input {
+  width: 100%;
+  font-family: var(--font);
+  font-size: .8rem;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.appt-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
 
 .status {
   display: inline-flex;
@@ -364,6 +411,7 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; }
   padding: 5px 11px;
   border-radius: 999px;
   white-space: nowrap;
+  text-transform: capitalize;
 }
 
 .status .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
@@ -443,13 +491,14 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; }
 
 .btn-outline:disabled { color: #94A3B8; cursor: not-allowed; background: var(--bg); }
 
-/* ============ CRUD visual de Servicios (Issue #11) ============ */
+/* ============ Formularios y acciones CRUD ============ */
 .btn-head {
   width: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 9px 14px;
+  white-space: nowrap;
 }
 
 .form-feedback {
@@ -556,6 +605,7 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; }
 
 .btn-sm svg.lucide { width: 14px; height: 14px; }
 .btn-sm:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.btn-sm.btn-success:hover { border-color: var(--emerald); color: var(--emerald); background: var(--emerald-soft); }
 .btn-sm.btn-danger:hover { border-color: var(--rose); color: var(--rose); background: var(--rose-soft); }
 
 .service-edit-box {
