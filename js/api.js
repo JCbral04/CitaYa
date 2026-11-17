@@ -160,14 +160,12 @@ export async function crearServicio(datos) {
     guardarServiciosLocal([...actuales, item]);
     return { data: item, source: "api" };
   } catch (error) {
-    if (!esErrorDeRed(error)) throw error;
-    const actuales = leerServiciosLocal();
-    const nuevoLocal = normalizarServicio(
-      { id: Date.now(), ...bodyAPI, icon },
-      actuales.length
-    );
-    guardarServiciosLocal([...actuales, nuevoLocal]);
-    return { data: nuevoLocal, source: "local" };
+    if (esErrorDeRed(error)) {
+      throw new Error(
+        "Sin conexión con el servidor: no se pudo registrar el servicio. Verifica que el backend esté encendido e inténtalo de nuevo."
+      );
+    }
+    throw error;
   }
 }
 
@@ -208,16 +206,12 @@ export async function actualizarServicio(servicioActual, cambios) {
     const actualizado = actualizados.find((s) => String(s.id) === String(servicioActual.id));
     return { data: actualizado, source: "api" };
   } catch (error) {
-    if (!esErrorDeRed(error)) throw error;
-    const actuales = leerServiciosLocal();
-    const actualizados = actuales.map((s) =>
-      String(s.id) === String(servicioActual.id)
-        ? { ...s, duracion, duracion_min: duracion, precio, activo }
-        : s
-    );
-    guardarServiciosLocal(actualizados);
-    const actualizado = actualizados.find((s) => String(s.id) === String(servicioActual.id));
-    return { data: actualizado, source: "local" };
+    if (esErrorDeRed(error)) {
+      throw new Error(
+        "Sin conexión con el servidor: no se pudieron guardar los cambios del servicio. Inténtalo de nuevo."
+      );
+    }
+    throw error;
   }
 }
 
@@ -349,6 +343,18 @@ export async function obtenerCitasHoy() {
     .filter((c) => c.fecha === hoy)
     .sort((a, b) => horaAMinutos(a.hora) - horaAMinutos(b.hora));
   return { data: delDia, source };
+}
+
+export async function obtenerProximasCitas() {
+  const hoy = obtenerFechaLocalISO();
+  const { data, source } = await obtenerTodasLasCitas();
+  const proximas = data
+    .filter((c) => c.fecha >= hoy)
+    .sort((a, b) => {
+      if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha);
+      return horaAMinutos(a.hora) - horaAMinutos(b.hora);
+    });
+  return { data: proximas, source };
 }
 
 export async function crearCita(datos) {

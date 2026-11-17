@@ -1,9 +1,9 @@
 // ============================================================
-// CitaYa — Módulo UI de citas del día y gestión de estados
+// CitaYa — Módulo UI de próximas citas y gestión de estados
 // ============================================================
 
 import {
-  obtenerCitasHoy,
+  obtenerProximasCitas,
   obtenerServicios,
   crearCita,
   cambiarEstadoCita,
@@ -219,7 +219,7 @@ function pintarListaCitas() {
     empty.className = "appt";
     const span = document.createElement("span");
     span.className = "card-sub";
-    span.textContent = "No hay citas programadas para hoy.";
+    span.textContent = "No hay próximas citas programadas.";
     empty.appendChild(span);
     list.appendChild(empty);
     return;
@@ -248,7 +248,7 @@ function cargarSelectServicios() {
 }
 
 async function refrescarCitas() {
-  const { data, source } = await obtenerCitasHoy();
+  const { data, source } = await obtenerProximasCitas();
   listaCitas = data;
   mostrarAvisoOrigen(source);
   pintarListaCitas();
@@ -421,7 +421,7 @@ function configurarEventos() {
 
 export async function renderCitas() {
   const [citasRes, serviciosRes] = await Promise.all([
-    obtenerCitasHoy(),
+    obtenerProximasCitas(),
     obtenerServicios(),
   ]);
   listaCitas = citasRes.data;
