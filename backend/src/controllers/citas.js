@@ -1,4 +1,4 @@
-// Logica de negocio de citas con maquina de estados (issue #4)
+// Logica de negocio de citas con maquina de estados (issues #4 y #5)
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { esFechaValida, esHoraValida, HORA_APERTURA, HORA_CIERRE } from "../utils/fechas.js";
 import * as modelo from "../models/citas.js";
@@ -10,6 +10,14 @@ const TRANSICIONES = {
   reprogramada: ["confirmada", "cancelada"],
   cancelada: [],
 };
+
+// 23505 = violacion del indice unico parcial (doble reserva, issue #5)
+function esDobleReserva(err) {
+  return err.code === "23505";
+}
+
+const MENSAJE_OCUPADO =
+  "Horario no disponible: ya existe una cita activa en ese servicio, fecha y hora";
 
 export const listar = asyncHandler(async (req, res) => {
   const { rows } = await modelo.listarCitas();
@@ -33,14 +41,21 @@ export const crear = asyncHandler(async (req, res) => {
     return res.status(404).json({ error: "Servicio no encontrado o inactivo" });
   }
 
-  const { rows } = await modelo.crearCita({
-    cliente_nombre: cliente_nombre.trim(),
-    servicio_id,
-    fecha,
-    hora_inicio,
-    precio: serv[0].precio,
-  });
-  res.status(201).json(rows[0]);
+  try {
+    const { rows } = await modelo.crearCita({
+      cliente_nombre: cliente_nombre.trim(),
+      servicio_id,
+      fecha,
+      hora_inicio,
+      precio: serv[0].precio,
+    });
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    if (esDobleReserva(err)) {
+      return res.status(409).json({ error: MENSAJE_OCUPADO });
+    }
+    throw err;
+  }
 });
 
 export const cambiarEstado = asyncHandler(async (req, res) => {
@@ -72,8 +87,16 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
     if (errores.length) {
       return res.status(422).json({ errores });
     }
-    const { rows: upd } = await modelo.reprogramarCita(req.params.id, fecha, hora_inicio);
-    return res.json(upd[0]);
+
+    try {
+      const { rows: upd } = await modelo.reprogramarCita(req.params.id, fecha, hora_inicio);
+      return res.json(upd[0]);
+    } catch (err) {
+      if (esDobleReserva(err)) {
+        return res.status(409).json({ error: MENSAJE_OCUPADO });
+      }
+      throw err;
+    }
   }
 
   const { rows: upd } = await modelo.cambiarEstado(req.params.id, nuevo);
