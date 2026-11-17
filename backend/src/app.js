@@ -1,9 +1,16 @@
 import express from "express";
 import routes from "./routes/index.js";
+import serviciosRoutes from "./routes/servicios.js";
+import notFound from "./middlewares/notFound.js";
+import errorHandler from "./middlewares/errorHandler.js";
 
 const app = express();
 
 app.use(express.json());
 app.use("/api", routes);
+app.use("/api/servicios", serviciosRoutes);
+
+app.use(notFound);
+app.use(errorHandler);
 
 export default app;
