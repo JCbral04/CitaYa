@@ -34,7 +34,7 @@ function crearIconoLucide(nombre) {
 }
 
 function mostrarMensaje(texto, tipo = "success") {
-  const box = document.getElementById("appointmentFeedback");
+  const box = document.getElementById("apptFeedback");
   if (!box) return;
 
   box.hidden = false;
@@ -57,7 +57,7 @@ function mostrarMensaje(texto, tipo = "success") {
 }
 
 function mostrarAvisoOrigen(source) {
-  const list = document.getElementById("appointmentsList");
+  const list = document.getElementById("apptList");
   const parent = list?.parentElement;
   if (!parent) return;
 
@@ -209,7 +209,7 @@ function crearItemCita(c) {
 }
 
 function pintarListaCitas() {
-  const list = document.getElementById("appointmentsList");
+  const list = document.getElementById("apptList");
   if (!list) return;
 
   list.replaceChildren();
@@ -258,11 +258,12 @@ function configurarEventos() {
   if (eventosInicializados) return;
   eventosInicializados = true;
 
-  const openBtn = document.getElementById("openAppointmentFormBtn");
-  const cancelBtn = document.getElementById("cancelAppointmentFormBtn");
-  const form = document.getElementById("appointmentForm");
+  const openBtn = document.getElementById("toggleApptFormBtn");
+  const topbarOpenBtn = document.getElementById("topbarNewApptBtn");
+  const cancelBtn = document.getElementById("cancelApptFormBtn");
+  const form = document.getElementById("apptForm");
   const submitBtn = form?.querySelector('button[type="submit"]');
-  const list = document.getElementById("appointmentsList");
+  const list = document.getElementById("apptList");
 
   const abrirFormulario = async () => {
     const { data } = await obtenerServicios();
@@ -274,16 +275,30 @@ function configurarEventos() {
       fechaInput.min = hoy;
       if (!fechaInput.value) fechaInput.value = hoy;
     }
-    form.hidden = false;
-    document.getElementById("apptCliente")?.focus();
+    if (form) {
+      form.hidden = false;
+      document.getElementById("apptCliente")?.focus();
+    }
   };
 
-  openBtn?.addEventListener("click", (e) => {
+  openBtn?.addEventListener("click", async (e) => {
     e.preventDefault();
-    abrirFormulario();
+    if (form && !form.hidden) {
+      form.reset();
+      form.hidden = true;
+      return;
+    }
+    await abrirFormulario();
+  });
+
+  topbarOpenBtn?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    document.getElementById("citas")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    await abrirFormulario();
   });
 
   cancelBtn?.addEventListener("click", () => {
+    if (!form) return;
     form.reset();
     form.hidden = true;
   });
@@ -320,7 +335,7 @@ function configurarEventos() {
     try {
       await crearCita({
         cliente,
-        servicio_id: servicioObj.id,
+        servicio_id: Number(servicioObj.id),
         servicio: servicioObj.nombre,
         duracion: servicioObj.duracion,
         fecha,
