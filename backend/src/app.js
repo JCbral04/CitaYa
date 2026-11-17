@@ -1,6 +1,7 @@
 import express from "express";
 import routes from "./routes/index.js";
 import serviciosRoutes from "./routes/servicios.js";
+import citasRoutes from "./routes/citas.js";
 import notFound from "./middlewares/notFound.js";
 import errorHandler from "./middlewares/errorHandler.js";
 
@@ -9,6 +10,7 @@ const app = express();
 app.use(express.json());
 app.use("/api", routes);
 app.use("/api/servicios", serviciosRoutes);
+app.use("/api/citas", citasRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
