@@ -75,7 +75,7 @@ function mostrarAvisoOrigen(source) {
     const grid = document.getElementById("servicesGrid");
     seccion.insertBefore(aviso, grid);
   }
-  aviso.textContent = "Modo sin conexión: mostrando catálogo local de respaldo.";
+  aviso.textContent = "Modo sin conexión (solo lectura): mostrando catálogo local de respaldo.";
 }
 
 function crearTarjetaServicio(s) {
@@ -86,7 +86,6 @@ function crearTarjetaServicio(s) {
   card.className = `service-card${s.activo ? "" : " is-inactive"}`;
   card.setAttribute("data-id", idSeguro);
 
-  // Cabecera
   const head = document.createElement("div");
   head.className = "service-head";
 
@@ -99,7 +98,6 @@ function crearTarjetaServicio(s) {
 
   head.append(iconWrap, titulo);
 
-  // Duración
   const meta = document.createElement("p");
   meta.className = "service-meta";
   meta.append(
@@ -107,12 +105,10 @@ function crearTarjetaServicio(s) {
     document.createTextNode(`${s.duracion} min`)
   );
 
-  // Precio
   const precio = document.createElement("p");
   precio.className = "service-price";
   precio.textContent = formatoCOP(Number(s.precio) || 0);
 
-  // Estado disponible
   const btnEstado = document.createElement("button");
   btnEstado.type = "button";
   btnEstado.className = "btn-outline";
@@ -121,7 +117,6 @@ function crearTarjetaServicio(s) {
 
   card.append(head, meta, precio, btnEstado);
 
-  // Acciones CRUD
   const actions = document.createElement("div");
   actions.className = "service-actions";
 
@@ -147,7 +142,6 @@ function crearTarjetaServicio(s) {
   actions.append(btnEdit, btnToggle);
   card.appendChild(actions);
 
-  // Caja de edición en línea
   if (enEdicion) {
     const editBox = document.createElement("div");
     editBox.className = "service-edit-box";
@@ -282,14 +276,12 @@ function configurarEventos() {
     if (submitBtn) submitBtn.disabled = true;
 
     try {
-      const { data: creado, source } = await crearServicio({ nombre, duracion, precio, icon });
+      const { data: creado } = await crearServicio({ nombre, duracion, precio, icon });
       listaServicios.push(creado);
       form.reset();
       form.hidden = true;
       pintarTarjetas();
-
-      const sufijo = source === "local" ? " (guardado en modo local sin conexión)" : "";
-      mostrarMensaje(`Servicio "${creado.nombre}" registrado correctamente${sufijo}.`);
+      mostrarMensaje(`Servicio "${creado.nombre}" registrado correctamente.`);
     } catch (error) {
       mostrarMensaje(error.message || "No se pudo registrar el servicio.", "error");
     } finally {
@@ -349,7 +341,7 @@ function configurarEventos() {
       pintarTarjetas();
 
       try {
-        const { data: actualizado, source } = await actualizarServicio(actual, {
+        const { data: actualizado } = await actualizarServicio(actual, {
           duracion: nuevaDuracion,
           precio: nuevoPrecio,
         });
@@ -357,8 +349,7 @@ function configurarEventos() {
           String(s.id) === String(id) ? actualizado : s
         );
         editandoId = null;
-        const sufijo = source === "local" ? " (modo local sin conexión)" : "";
-        mostrarMensaje(`Servicio "${actual.nombre}" actualizado${sufijo}.`);
+        mostrarMensaje(`Servicio "${actual.nombre}" actualizado correctamente.`);
       } catch (error) {
         mostrarMensaje(error.message || "No se pudo actualizar el servicio.", "error");
       } finally {
@@ -374,16 +365,15 @@ function configurarEventos() {
       pintarTarjetas();
 
       try {
-        const { data: actualizado, source } = await cambiarEstadoServicio(actual, nuevoEstado);
+        const { data: actualizado } = await cambiarEstadoServicio(actual, nuevoEstado);
         listaServicios = listaServicios.map((s) =>
           String(s.id) === String(id) ? actualizado : s
         );
         if (!nuevoEstado && String(editandoId) === String(id)) {
           editandoId = null;
         }
-        const sufijo = source === "local" ? " (modo local sin conexión)" : "";
         mostrarMensaje(
-          `Servicio "${actual.nombre}" ${nuevoEstado ? "reactivado" : "desactivado"}${sufijo}.`
+          `Servicio "${actual.nombre}" ${nuevoEstado ? "reactivado" : "desactivado"} correctamente.`
         );
       } catch (error) {
         mostrarMensaje(error.message || "No se pudo cambiar el estado del servicio.", "error");
