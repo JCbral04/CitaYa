@@ -26,17 +26,24 @@ function inicializarSidebar() {
   );
 }
 
-function init() {
+async function init() {
   inicializarSidebar();
-  renderIndicadores();
-  renderCitas();
   inicializarGrafica();
 
-  if (window.lucide) lucide.createIcons();
+  const modulos = [
+    ["indicadores", renderIndicadores()],
+    ["citas", renderCitas()],
+    ["servicios", renderServicios()],
+  ];
 
-  renderServicios().catch((error) => {
-    console.error("Error al renderizar servicios:", error);
+  const resultados = await Promise.allSettled(modulos.map(([, promesa]) => promesa));
+  resultados.forEach((res, idx) => {
+    if (res.status === "rejected") {
+      console.error(`Error al inicializar módulo "${modulos[idx][0]}":`, res.reason);
+    }
   });
+
+  if (window.lucide) lucide.createIcons();
 }
 
 init();

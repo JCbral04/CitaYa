@@ -6,8 +6,9 @@ import { obtenerCitasHoy, obtenerCitasPorPeriodo } from "../api.js";
 
 export const formatoCOP = (valor) => "$" + valor.toLocaleString("es-CO");
 
-export function renderIndicadores() {
-  const activas = obtenerCitasHoy().filter((c) => c.estado !== "cancelada");
+export async function renderIndicadores() {
+  const citas = await obtenerCitasHoy();
+  const activas = citas.filter((c) => c.estado !== "cancelada");
   const indicadores = [
     {
       icono: "calendar-days", tinte: "blue",
@@ -30,7 +31,7 @@ export function renderIndicadores() {
     {
       icono: "wallet", tinte: "sky",
       titulo: "Ingresos estimados",
-      valor: formatoCOP(activas.reduce((sum, c) => sum + c.precio, 0)),
+      valor: formatoCOP(activas.reduce((sum, c) => sum + (Number(c.precio) || 0), 0)),
       detalle: "ingresos del día",
     },
   ];
@@ -47,6 +48,8 @@ export function renderIndicadores() {
       <p class="stat-foot">${i.detalle}</p>
     </article>
   `).join("");
+
+  if (window.lucide) lucide.createIcons();
 }
 
 let chartCitas;
