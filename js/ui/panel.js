@@ -2,41 +2,90 @@
 // CitaYa — Módulo UI del panel del día (indicadores y gráfica)
 // ============================================================
 
-import { obtenerCitasHoy, obtenerCitasPorPeriodo } from "../api.js";
+import { obtenerResumenPanel, obtenerCitasPorPeriodo } from "../api.js";
 
-export const formatoCOP = (valor) => "$" + valor.toLocaleString("es-CO");
+export const formatoCOP = (valor) => "$" + Number(valor || 0).toLocaleString("es-CO");
+
+let versionRender = 0;
+
+function renderSkeletonIndicadores(grid) {
+  grid.setAttribute("aria-busy", "true");
+  grid.innerHTML = Array.from({ length: 4 }, () => `
+    <article class="stat-card is-loading" aria-hidden="true">
+      <div class="stat-top">
+        <span class="skeleton-block skeleton-icon"></span>
+        <div>
+          <span class="skeleton-block skeleton-label"></span>
+          <span class="skeleton-block skeleton-value"></span>
+        </div>
+      </div>
+      <span class="skeleton-block skeleton-foot"></span>
+    </article>
+  `).join("");
+}
+
+function mostrarAvisoOrigenPanel(source) {
+  const grid = document.getElementById("statsGrid");
+  const parent = grid?.parentElement;
+  if (!parent) return;
+
+  let aviso = document.getElementById("panelSourceNotice");
+  if (source !== "fallback") {
+    if (aviso) aviso.remove();
+    return;
+  }
+
+  if (!aviso) {
+    aviso = document.createElement("p");
+    aviso.id = "panelSourceNotice";
+    aviso.className = "card-sub";
+    aviso.style.marginTop = "-10px";
+    parent.insertBefore(aviso, grid.nextSibling);
+  }
+  aviso.textContent = "Mostrando información local. Los indicadores pueden no estar actualizados.";
+}
 
 export async function renderIndicadores() {
-  const citas = await obtenerCitasHoy();
-  const activas = citas.filter((c) => c.estado !== "cancelada");
+  const versionActual = ++versionRender;
+  const grid = document.getElementById("statsGrid");
+  if (!grid) return;
+
+  renderSkeletonIndicadores(grid);
+
+  const { data: resumen, source } = await obtenerResumenPanel();
+  if (versionActual !== versionRender) {
+    return;
+  }
+
   const indicadores = [
     {
       icono: "calendar-days", tinte: "blue",
       titulo: "Citas de hoy",
-      valor: activas.length,
+      valor: resumen.activas,
       detalle: "activas en la agenda",
     },
     {
       icono: "check-circle-2", tinte: "emerald",
       titulo: "Confirmadas",
-      valor: activas.filter((c) => c.estado === "confirmada").length,
+      valor: resumen.confirmadas,
       detalle: "listas para atender",
     },
     {
       icono: "clock", tinte: "amber",
       titulo: "Pendientes",
-      valor: activas.filter((c) => c.estado === "pendiente").length,
+      valor: resumen.pendientes,
       detalle: "por confirmar",
     },
     {
       icono: "wallet", tinte: "sky",
       titulo: "Ingresos estimados",
-      valor: formatoCOP(activas.reduce((sum, c) => sum + (Number(c.precio) || 0), 0)),
+      valor: formatoCOP(resumen.ingresosEstimados),
       detalle: "ingresos del día",
     },
   ];
 
-  document.getElementById("statsGrid").innerHTML = indicadores.map((i) => `
+  grid.removeAttribute("aria-busy");
+  grid.innerHTML = indicadores.map((i) => `
     <article class="stat-card">
       <div class="stat-top">
         <span class="stat-icon ${i.tinte}"><i data-lucide="${i.icono}"></i></span>
@@ -48,6 +97,8 @@ export async function renderIndicadores() {
       <p class="stat-foot">${i.detalle}</p>
     </article>
   `).join("");
+
+  mostrarAvisoOrigenPanel(source);
 
   if (window.lucide) lucide.createIcons();
 }
@@ -63,7 +114,7 @@ export function renderGrafica(periodo) {
     data: {
       labels: config.labels,
       datasets: [{
-        label: "Citas",
+        label: "Citas (demostración)",
         data: config.data,
         backgroundColor: "#2563EB",
         hoverBackgroundColor: "#1D4ED8",
@@ -93,6 +144,12 @@ export function renderGrafica(periodo) {
 }
 
 export function inicializarGrafica() {
+  const canvas = document.getElementById("chartCitas");
+  const subtitulo = canvas?.closest(".card")?.querySelector(".card-sub");
+  if (subtitulo) {
+    subtitulo.textContent = "Volumen de reservas por período · Datos de demostración";
+  }
+
   renderGrafica("week");
   document.querySelectorAll(".seg-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
