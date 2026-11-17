@@ -6,12 +6,13 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test tests/api.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
-    "pg": "^8.23.1"
+    "pg": "^8.13.1"
   },
   "engines": {
     "node": ">=18"
