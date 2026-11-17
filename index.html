@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-<base target="_blank">
 </head>
 <body>
   <div class="app">
@@ -102,7 +101,45 @@
               <h2>Servicios del negocio</h2>
               <p class="card-sub">Catálogo disponible para reserva</p>
             </div>
+            <button type="button" class="btn-outline btn-head" id="toggleServiceFormBtn">
+              <i data-lucide="plus"></i>Nuevo servicio
+            </button>
           </div>
+
+          <div id="serviceFeedback" class="form-feedback" hidden role="status" aria-live="polite"></div>
+
+          <form id="serviceForm" class="service-form" hidden novalidate>
+            <div class="service-form-grid">
+              <div class="form-field">
+                <label for="srvNombre">Nombre del servicio</label>
+                <input type="text" id="srvNombre" name="nombre" placeholder="Ej. Corte degradado" maxlength="60" required>
+              </div>
+              <div class="form-field">
+                <label for="srvDuracion">Duración (min)</label>
+                <input type="number" id="srvDuracion" name="duracion" placeholder="30" min="5" max="480" step="5" required>
+              </div>
+              <div class="form-field">
+                <label for="srvPrecio">Precio (COP)</label>
+                <input type="number" id="srvPrecio" name="precio" placeholder="18000" min="1000" step="500" required>
+              </div>
+              <div class="form-field">
+                <label for="srvIcon">Ícono</label>
+                <select id="srvIcon" name="icon">
+                  <option value="scissors">Tijeras (Corte)</option>
+                  <option value="brush">Brocha (Barba)</option>
+                  <option value="sparkles">Destellos (Combo)</option>
+                  <option value="hand">Mano (Cuidado)</option>
+                </select>
+              </div>
+            </div>
+            <div class="service-form-actions">
+              <button type="submit" class="btn-primary">
+                <i data-lucide="check"></i>Guardar servicio
+              </button>
+              <button type="button" class="btn-outline" id="cancelServiceFormBtn">Cancelar</button>
+            </div>
+          </form>
+
           <div class="services-grid" id="servicesGrid"></div>
         </section>
 
@@ -140,6 +177,6 @@
     </div>
   </div>
 
-<script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
