@@ -25,7 +25,39 @@ jobs:
 
       - name: Verificar sintaxis de los módulos JS
         run: |
-          for file in js/data.js js/api.js js/main.js js/ui/panel.js js/ui/citas.js js/ui/servicios.js; do
-            echo "Verificando $file"
-            node --input-type=module --check < "$file"
-          done
+          node --check js/data.js
+          node --check js/app.js
+
+  test-backend:
+    name: Pruebas backend (node:test + PostgreSQL)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        run: cd backend && npm ci
+
+      - name: Ejecutar pruebas
+        run: cd backend && npm test
